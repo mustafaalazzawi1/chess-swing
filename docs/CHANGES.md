@@ -1,15 +1,25 @@
-# Changes
+# Changelog
 
-## v1.2.0 visual redesign
+## Repository updates after v1.2.0
 
-- Flexible Home with original board artwork, actionable mode cards, and Resume when a game exists.
-- Light, dark, and high-contrast appearances shared by play, practice, setup, and dialogs.
-- Original Java2D chess pieces, distinct board markers, aligned history, clock and capture cards, and grouped actions with keyboard focus.
-- FlatLaf 3.6.2 is pinned, checksum-verified, and bundled for reproducible offline builds. The existing game logic and timing are unchanged.
+- Reorganized the README around the application, downloads, features, and verification.
+- Added a user guide and separate build, Mac packaging, and platform-verification documentation.
+- Updated architecture notes and verification status.
+- Corrected hosted Java setup and added workflows to verify, package, and publish the fixed v1.2.0 source.
+- Application behavior, version, release tag, and downloadable asset hashes are unchanged.
 
-## v1.1.0 learning and usability
+## v1.2.0 — Visual redesign
 
-- The welcome screen offers computer play, local play, practice, PGN import, and resume. A recovered game is ready from Home with the clock paused.
-- An on-demand hint offers one legal engine suggestion without committing a move or pausing the clock. Computer reply timing remains unchanged.
-- Eight original checkmate exercises use the existing rules engine to validate all winning alternatives and defender replies. Practice state stays in memory and separate from live games.
-- The JAR and macOS packaging script use v1.1.0. This pass was tested on Linux. See the README for the owner's prior Mac evidence and the new Mac retest.
+- Flexible Home screen with original board artwork, mode cards, and Resume for an existing game.
+- Light, dark, and high-contrast appearances across play, practice, setup, and dialogs.
+- Original Java2D pieces and distinct markers for legal moves, last moves, hints, check, and keyboard focus.
+- Consistent history, clock, and capture displays with grouped controls.
+- Pinned and checksum-verified FlatLaf 3.6.2 dependency for offline builds.
+- Existing game rules and computer reply timing preserved.
+
+## v1.1.0 — Learning and usability
+
+- Home entry points for computer play, local play, practice, PGN import, and recovery.
+- Legal engine hints without automatically playing a move or pausing the live clock.
+- Five mate-in-one and three mate-in-two puzzles accepting alternative winning moves.
+- Independent practice state and paused live-game recovery from Home.

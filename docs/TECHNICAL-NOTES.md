@@ -1,38 +1,82 @@
-# Chess Swing interview notes
+# Architecture and design
+
+Chess Swing separates legal chess state, match timing, computer search, persistence, and desktop presentation. The Swing and console entry points share the same rules engine.
+
+```mermaid
+flowchart TD
+  Window["Swing window / EDT"] --> Session["Match session and clock"]
+  Session --> Rules["Chess rules and board"]
+  Window --> Worker["Background computer search"]
+  Worker -->|"candidate move"| Window
+  Window --> Practice["Puzzle session"]
+  Practice --> Rules
+  Session --> Files["PGN and local recovery"]
+  Console["Console"] --> Rules
+```
 
 ## Rules and state
 
-- Trace a move from a square click through `ChessWindow`, `MatchSession`, and `ChessMatch.play`. Piece geometry produces candidates. The engine simulates a candidate, checks king safety, and restores the temporary board before deciding whether to commit.
-- The position key includes board occupancy, turn, castling rights, and an en passant square only when a legal capture is available. Move-count and repetition rules depend on this state, even if two boards appear identical.
-- SAN is computed from the pre-move position. If another legal same-type piece can reach the destination, record the minimum file/rank disambiguation. Check and mate suffixes come from the resulting position.
-- Takebacks and replay rebuild from the validated starting position and a prefix of moves. This avoids maintaining multiple inverse-move paths for castling, promotion, and en passant. Backward replay takes longer for very long games.
+A square click passes through `ChessWindow`, `MatchSession`, and `ChessMatch.play`. Piece geometry produces candidates. The engine simulates a candidate, checks king safety, and restores the temporary board before deciding whether to commit it.
 
-## Computer opponent
+A repetition key includes board occupancy, the turn, castling rights, and an en passant square only when a legal capture is available. Move-count and repetition rules depend on this state even when two boards look identical.
 
-- Negamax expresses both sides using one score from the current player's perspective. After making a move, negate the child's score. Alpha-beta skips branches that cannot alter the decision. Every branch uses the same chess rules as a human move.
-- Evaluation values are pawn 100, knight 320, bishop 330, rook 500, and queen 900. Center proximity is measured with Manhattan distance from the center; knights and bishops get three times the center bonus, rooks and queens one times it, and pawns add a three-point bonus per advanced rank. Kings have no positional bonus. Terminal mate scores dominate material, and terminal draws score zero.
-- Iterative deepening saves a result from the last finished depth. Time, node, and cancellation checks keep the search bounded; direct captures and promotions are ordered first. Copying positions makes isolation approachable at this scale and uses more allocations than make/unmake search.
-- Swing retains separate worker references for computer play and on-demand hints. New game, import, replay, takeback, dialog, or close can invalidate it. The worker sees a detached board. Its EDT completion handler checks reference and session identity and revalidates turn, flag fall, and legality before committing.
+## Search and concurrency
 
-## Learning features
+`ComputerSearch` uses negamax with alpha-beta pruning and iterative deepening. Negamax evaluates each position from the current player's perspective; alpha-beta skips branches that cannot improve the decision. The search keeps the result from the last completed depth and a legal fallback when its budget expires.
 
-- A hint requests the same bounded search on a detached position and renders the returned move without committing it. The completion callback checks worker identity, session, match identity, ply, live view, side, flag fall, and final move legality. A takeback can reproduce the same position while replacing the match identity, so a ply count alone is insufficient.
-- A mate-in-two attack qualifies only if every legal defense has at least one mating response. The tests independently enumerate attacks, defenses, and mating replies. Practice selects a defense with the fewest mating continuations, and accepts alternate correct attacks and finishes.
-- Home and practice suspend live activity. Practice owns only its own puzzle board and feedback. Returning to a game restores the paused live session and does not commit puzzle moves.
+The evaluation combines material with simple positional bonuses. Piece values are pawn 100, knight 320, bishop 330, rook 500, and queen 900. Center proximity benefits pieces, and pawn advancement adds a small bonus. Terminal mate scores dominate material; terminal draws score zero.
 
-## Time and persistence
+Search runs through `SwingWorker` on a detached position. Separate workers serve computer turns and hints. New games, imports, replay, takebacks, dialogs, or closing the window can invalidate pending work. The completion handler checks worker and session identity, turn, live view, clock, and move legality on Swing's event thread before accepting a computer reply.
 
-- The clock uses `System.nanoTime()`, not wall-clock time. A turn is charged when sampled, and a move snapshots both readings. In tests a fake monotonic clock drives pauses, replay, takebacks, flag fall, and recovery without sleeps.
-- PGN is the portable move record. Private recovery additionally stores a version, session setup, and bounded clock checkpoints in local tags. Recovery validates the ledger against the number and color of the moves. A file lock gives one window recovery ownership.
-- Play and export a short game, enter replay, and compare the live position afterward. Then describe what should happen if the search completes just as the user enters replay or a clock expires.
+Copying positions makes isolation straightforward at this scale, at the cost of more allocations than a make/unmake search.
 
-## Visual layer
+## Notation, replay, and takebacks
 
-- `VisualStyle` owns the palette and FlatLaf defaults. Theme changes update the component tree with the history selection callback guarded. They do not call the session pause, resume, search or move paths.
-- `PieceArt` draws original reusable silhouettes from Java2D paths. The same shapes are used on the scaled board, the Home illustration, and the capture display. Swing buttons retain their standard accessible actions.
-- The sidebar derives its width from the current controls' preferred sizes, and the minimum window size accounts for the Home and board layouts. The headful test checks actual button bounds, label fit, and palette replacement.
+SAN is computed from the pre-move position. When another legal piece of the same type can reach the destination, notation includes the minimum file or rank disambiguation. Check and mate suffixes come from the resulting position.
 
-## Discuss honestly
+Replay and takebacks rebuild from the validated starting position and a prefix of recorded moves. This avoids separate inverse-move logic for castling, en passant, and promotion. Reconstructing earlier positions takes longer in very long games.
 
-- The original Java/Swing project is Mustafa's. The later implementation was assisted. Be prepared to explain and modify a specific feature rather than claiming sole authorship.
-- This is a modest local engine. Its tests establish behavior for covered cases, not an Elo or comprehensive proof of legality. Linux automated tests and UI checks are separate from the owner's v1.0.1 Mac JAR UI/computer/clock smoke test and v1.0.0 Apple-silicon native build and launch. Hosted Actions and v1.2.0 Mac checks remain pending.
+## Clocks and recovery
+
+`MatchClock` uses `System.nanoTime()`. Sampling charges the active turn, and each accepted move records both clock readings. Tests use a fake monotonic clock to exercise pauses, replay, takebacks, flag fall, and recovery without timing-dependent sleeps.
+
+PGN stores the portable move record. Local recovery adds versioned session settings and bounded clock checkpoints. Recovery validates the clock ledger against the number and color of moves. A file lock gives one window ownership of the recovery copy.
+
+Timed play pauses in Home, practice, replay, and application dialogs. Outside those dialogs, losing window focus does not pause the game. This pause policy supports local play and review; it is not an online competitive clock.
+
+## Hints and puzzles
+
+A hint uses bounded search without committing the suggested move. Its completion callback validates worker, session and match identity, ply, live view, side, clock, and final legality. Checking only the ply is insufficient because a takeback may recreate a position in a replacement match.
+
+A mate-in-two attack qualifies only when every legal defense has a mating response. Tests independently enumerate attacks, defenses, and replies. Practice accepts alternative winning attacks and finishes, and chooses a defense with the fewest mating continuations.
+
+Practice owns a separate puzzle board and feedback state. Returning to a paused match restores that match without applying any puzzle moves.
+
+## Desktop presentation
+
+`VisualStyle` owns the palette and FlatLaf defaults. Theme changes update the component tree while guarding history-selection callbacks; they do not change the match state.
+
+`PieceArt` renders original Java2D silhouettes on the board, Home illustration, and capture display. The sidebar derives its width from the controls' preferred sizes. Minimum window dimensions account for both Home and board layouts. Layout checks cover button labels, keyboard focusability, and palette changes.
+
+## Verification
+
+The automated suite contains 40 test groups across rules, PGN and files, sessions and clocks, and learning features. Rules checks include starting-position perft through depth 3 and Kiwipete through depth 2. A packaged-JAR smoke test exercises console checkmate and the icon resource.
+
+Hosted [release verification](https://github.com/mustafaalazzawi1/chess-swing/actions/runs/45368356365) checked out the exact v1.2.0 source and passed. The [publishing job](https://github.com/mustafaalazzawi1/chess-swing/actions/runs/45370348643) rebuilt from the source ZIP and verified anonymous public downloads against the expected hashes.
+
+See [Build and verification](BUILD-AND-VERIFICATION.md) for commands, GUI checks, and platform coverage.
+
+## Scope and tradeoffs
+
+- Local, orthodox chess; no network multiplayer.
+- Three shallow search levels with approximate time budgets. There is no opening book, tablebase, or measured Elo.
+- PGN import retains one UTF-8 game's main line, up to 512 KiB. Comments, annotations, and variations are skipped.
+- Draw claims apply to the current position. Dead-position and flag-fall mating-material detection cover common cases rather than arbitrary reachability.
+- Practice progress is in memory. Recovery resumes from its last saved clock readings without charging time spent away.
+- Tests establish behavior for covered cases; they are not a proof of every legal chess position.
+
+## Development history
+
+Mustafa Al Azzawi created the original ChessCode Java/Swing application. Chess Swing retains that foundation, including the board and piece classes and console mode. The later rules, interface, search, clock, persistence, and packaging work was developed with AI coding assistance under his direction, with hands-on application testing and feedback from Mustafa.
+
+[Artwork and dependency credits](ASSETS.md) identify the original project artwork and the bundled FlatLaf library.
