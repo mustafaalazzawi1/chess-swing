@@ -1,0 +1,15 @@
+/build/
+/out/
+/.idea/
+*.iml
+*.class
+*.jar
+*.zip
+.DS_Store
+__MACOSX/
+.env
+.env.*
+*.pem
+*.key
+
+!lib/flatlaf-3.6.2.jar
