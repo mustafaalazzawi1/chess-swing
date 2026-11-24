@@ -1,0 +1,135 @@
+name: Publish Chess Swing v1.2.0
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  publish:
+    if: github.repository == 'mustafaalazzawi1/chess-swing' && github.ref == 'refs/heads/main'
+    permissions:
+      contents: write
+    concurrency:
+      group: chess-swing-v1.2.0-release
+      cancel-in-progress: false
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    env:
+      RELEASE_COMMIT: b1de0bcfb40f5b52d1ed730b6430cd4969424dd5
+      RELEASE_ID: '456560965'
+      REVIEWED_SOURCE_SHA256: 57f0efe90e15f0b8863d95620a4314301c61400bbe72cea744d1925a0e2224ee
+      REVIEWED_JAR_SHA256: a3b5fefa8f41978e8d31b4b92c5d8bea65149391494c9392cc71f263e5d6f723
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          ref: b1de0bcfb40f5b52d1ed730b6430cd4969424dd5
+          persist-credentials: false
+      - uses: actions/setup-java@c5195efecf7bdfc987ee8bae7a71cb8b11521c00 # v4.7.1
+        with:
+          distribution: temurin
+          java-version: '21.0.11'
+      - name: Verify source, build from the ZIP, and checksum the assets
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$RELEASE_COMMIT"
+          java -version 2>&1 | tee /dev/stderr | grep -F 'Temurin-21.0.11+10'
+          expected_tree="$(git rev-parse 'HEAD^{tree}')"
+          output="$RUNNER_TEMP/chess-release-assets"
+          extracted="$RUNNER_TEMP/chess-release-extract"
+          mkdir "$output" "$extracted"
+          git archive --format=zip --prefix=chess-swing-v1.2.0-source/ \
+            -o "$output/chess-swing-v1.2.0-source.zip" "$RELEASE_COMMIT"
+          unzip -tq "$output/chess-swing-v1.2.0-source.zip"
+          unzip -q "$output/chess-swing-v1.2.0-source.zip" -d "$extracted"
+          cd "$extracted/chess-swing-v1.2.0-source"
+          git init -q
+          git -c core.filemode=true add -f -- .
+          test "$(git write-tree)" = "$expected_tree"
+          printf 'Verified tagged source tree %s\n' "$expected_tree"
+          test "$(cat VERSION)" = 1.2.0
+          test -s lib/FLATLAF-LICENSE.txt
+          test -s lib/flatlaf-3.6.2.jar
+          ./build.sh --test
+          ./scripts/smoke-jar.sh
+          cp build/chess-swing.jar "$output/chess-swing-v1.2.0.jar"
+          cd "$output"
+          printf '%s  %s\n' "$REVIEWED_JAR_SHA256" chess-swing-v1.2.0.jar | sha256sum -c -
+          printf '%s  %s\n' "$REVIEWED_SOURCE_SHA256" chess-swing-v1.2.0-source.zip | sha256sum -c -
+          sha256sum chess-swing-v1.2.0.jar chess-swing-v1.2.0-source.zip > SHA256SUMS.txt
+          sha256sum -c SHA256SUMS.txt
+          cat SHA256SUMS.txt
+      - name: Upload verified assets and publish the existing draft
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          repo="$GITHUB_REPOSITORY"
+          endpoint="repos/$repo/releases/$RELEASE_ID"
+          tag_endpoint="repos/$repo/git/ref/tags/v1.2.0"
+          tag="$(gh api "$tag_endpoint" --jq '.object | select(.type == "tag") | .sha')"
+          test "$(gh api "repos/$repo/git/tags/$tag" --jq '.object.sha')" = "$RELEASE_COMMIT"
+          cd "$RUNNER_TEMP/chess-release-assets"
+          shopt -s nullglob
+          files=(chess-swing-v1.2.0.jar chess-swing-v1.2.0-source.zip SHA256SUMS.txt)
+
+          verify_state() {
+            jq -e --argjson id "$RELEASE_ID" '
+              .id == $id and .tag_name == "v1.2.0" and
+              ([.assets[].name] | length == (unique | length)) and
+              all(.assets[]; .name == "chess-swing-v1.2.0.jar" or
+                .name == "chess-swing-v1.2.0-source.zip" or .name == "SHA256SUMS.txt")
+            ' <<< "$state" >/dev/null
+            for file in "${files[@]}"; do
+              size="$(stat -c %s "$file")"
+              digest="sha256:$(sha256sum "$file" | cut -d ' ' -f 1)"
+              jq -e --arg name "$file" --argjson size "$size" --arg digest "$digest" '
+                all(.assets[] | select(.name == $name); .state == "uploaded" and
+                    .size == $size and .digest == $digest)
+              ' <<< "$state" >/dev/null || {
+                echo "An existing asset differs from the verified file: $file" >&2
+                return 1
+              }
+            done
+          }
+
+          state="$(gh api "$endpoint")"
+          verify_state
+          if jq -e '.draft' <<< "$state" >/dev/null; then
+            for file in "${files[@]}"; do
+              if ! jq -e --arg name "$file" 'any(.assets[]; .name == $name)' <<< "$state" >/dev/null; then
+                # Never overwrite an asset. GitHub rejects an upload if the name appeared concurrently.
+                gh release upload v1.2.0 --repo "$repo" "$file"
+              fi
+            done
+            state="$(gh api "$endpoint")"
+            verify_state
+            test "$(jq '.assets | length' <<< "$state")" -eq 3
+            test "$(gh api "$tag_endpoint" --jq .object.sha)" = "$tag"
+            gh api --method PATCH "$endpoint" -F draft=false --jq .html_url
+          else
+            test "$(jq '.assets | length' <<< "$state")" -eq 3
+          fi
+
+          state="$(gh api "$endpoint")"
+          verify_state
+          jq -e '.draft == false and (.assets | length == 3)' <<< "$state" >/dev/null
+          jq -r '.assets[] | [.name,.size,.digest] | @tsv' <<< "$state"
+      - name: Verify anonymous public downloads
+        shell: bash
+        run: |
+          set -euo pipefail
+          base="https://github.com/$GITHUB_REPOSITORY/releases"
+          files=(chess-swing-v1.2.0.jar chess-swing-v1.2.0-source.zip SHA256SUMS.txt)
+          downloaded="$(mktemp -d)"
+          curl -fsSL --retry 5 --retry-all-errors "$base/tag/v1.2.0" -o /dev/null
+          cd "$downloaded"
+          for file in "${files[@]}"; do
+            curl -fsSL --retry 5 --retry-all-errors "$base/download/v1.2.0/$file" -o "$file"
+            cmp "$file" "$RUNNER_TEMP/chess-release-assets/$file"
+            printf 'Verified public download: %s\n' "$file"
+          done
+          sha256sum -c SHA256SUMS.txt
