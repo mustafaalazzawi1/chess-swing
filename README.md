@@ -1,5 +1,7 @@
 # Chess Swing
 
+[![Build and test](https://github.com/mustafaalazzawi1/chess-swing/actions/workflows/build.yml/badge.svg)](https://github.com/mustafaalazzawi1/chess-swing/actions/workflows/build.yml)
+
 **A Java 21 desktop chess application by Mustafa Al Azzawi.**
 
 Play against a local computer opponent or another person on the same board. Use optional clocks, review and save games, or practice checkmate puzzles.
