@@ -50,7 +50,7 @@ The Swing and console interfaces share one rules engine. Computer search runs on
 
 ## Verification and scope
 
-**40 automated test groups** cover rules, notation, file handling, replay, computer search, clocks, and practice. The packaged-JAR smoke test and [hosted release verification](https://github.com/mustafaalazzawi1/chess-swing/actions/runs/45368356365) passed. Public release downloads were also [verified against their checksums](https://github.com/mustafaalazzawi1/chess-swing/actions/runs/45370348643).
+**40 engine/session test groups plus three view-contract checks** cover rules, notation, file handling, replay, computer search, clocks, and practice. The packaged-JAR smoke test and [hosted release verification](https://github.com/mustafaalazzawi1/chess-swing/actions/runs/45368356365) passed. Public release downloads were also [verified against their checksums](https://github.com/mustafaalazzawi1/chess-swing/actions/runs/45370348643).
 
 Linux verification includes GUI and layout checks. The v1.2.0 JAR has limited macOS launch and interface verification. A prebuilt v1.2.0 Mac app is not included; [build instructions and platform coverage](docs/BUILD-AND-VERIFICATION.md) describe the remaining checks.
 

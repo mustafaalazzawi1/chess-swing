@@ -1,6 +1,12 @@
 # Changelog
 
-## Repository updates after v1.2.0
+## Source maintenance — 25 November 2026
+
+- Extracted board, Home, practice, and shared control presentation from the window controller.
+- Added three view-contract checks and enabled existing headful layout checks in CI.
+- Kept game rules, computer timing, and the published v1.2.0 release assets unchanged.
+
+## Repository documentation updates after v1.2.0
 
 - Reorganized the README around the application, downloads, features, and verification.
 - Added a user guide and separate build, Mac packaging, and platform-verification documentation.

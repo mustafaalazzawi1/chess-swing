@@ -34,4 +34,5 @@ if [ "${1-}" = --test ]; then
     java -cp build/classes:build/test-classes oopchesscode.game.PgnTest
     java -cp build/classes:build/test-classes oopchesscode.game.PortfolioTest
     java -cp build/classes:build/test-classes oopchesscode.game.LearningTest
+    java -Djava.awt.headless=true -cp build/classes:build/test-classes oopchesscode.game.ChessViewTest
 fi

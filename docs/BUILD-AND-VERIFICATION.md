@@ -82,3 +82,7 @@ The build workflow runs on pushes and pull requests and can also verify a specif
 The manual v1.2.0 packaging and publishing workflows use the fixed release commit and verify the JAR and source ZIP hashes. The publishing job alone has repository write permission.
 
 The v1.2.0 tag and downloadable source ZIP are fixed release snapshots. Later documentation and workflow updates on `main` do not replace those release files.
+
+### Current source maintenance
+
+The post-v1.2.0 source separates board, Home, and practice views from the window controller. `./build.sh --test` now adds three view-contract checks after the existing 40 engine/session groups. CI additionally executes `ChessWindowLayoutTest` under Xvfb. These source checks do not change or retest the already published v1.2.0 binary.

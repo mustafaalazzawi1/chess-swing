@@ -80,3 +80,9 @@ See [Build and verification](BUILD-AND-VERIFICATION.md) for commands, GUI checks
 Mustafa Al Azzawi created the original ChessCode Java/Swing application. Chess Swing retains that foundation, including the board and piece classes and console mode. The later rules, interface, search, clock, persistence, and packaging work was developed with AI coding assistance under his direction, with hands-on application testing and feedback from Mustafa.
 
 [Artwork and dependency credits](ASSETS.md) identify the original project artwork and the bundled FlatLaf library.
+
+## View separation after v1.2.0
+
+`ChessWindow` coordinates sessions, clocks, replay, file operations, and asynchronous search. Presentation is split into `ChessBoardView` (rendering, orientation, keyboard focus, square callbacks), `ChessHomeView` (mode selection and resume), and `ChessPracticeView` (puzzle controls and feedback). `SwingControls` centralizes accessible buttons and keyboard bindings. Views receive data or intent callbacks; they do not apply chess moves or own a live session.
+
+The refactor reduces the window from 1,176 to 831 lines without changing rules, clock policy, or search settings. Three view-contract checks exercise coordinate mapping after a flip, stale hint removal, non-mutating callbacks, mode actions, and resume labels. The existing 40 engine/session groups and packaged-JAR smoke test remain in place; CI also runs the existing window-layout checks on a virtual display. This is a source maintenance change after the v1.2.0 release; published v1.2.0 binaries remain unchanged.
